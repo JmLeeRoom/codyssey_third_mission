@@ -2,6 +2,27 @@
 
 AI의 MAC(Multiply-Accumulate) 연산 원리를 흉내 내어, 십자가(Cross)/X 패턴을 필터와 비교·판정하는 콘솔 애플리케이션이다. 명세는 `docs/reference.md`, 세부 구현 체크리스트는 `docs/TODO.md`를 따른다.
 
+## 0. 요구사항 충족 현황
+
+이 README는 <code>docs/reference.md</code>를 기준으로 작성했다. 아래 표는 평가자가 필수 요구사항과 문서 근거를 빠르게 대조할 수 있도록 만든 추적표다. 성능 시간과 스크린샷처럼 실행 환경에 따라 달라지는 값은 같은 실행 결과의 로그·리포트와 함께 갱신해야 한다.
+
+| 필수 요구사항 | README 근거 | 문서화한 충족 기준 |
+|---|---|---|
+| Python 3.8 이상, 외부 라이브러리 금지 | 1. 실행 방법, 2. 구현 요약 | 표준 라이브러리만 사용하고 Python 3.8 호환 문법으로 실행한다. |
+| 모드 1: 3×3 A/B 필터와 패턴 | 1. 실행 방법, 3. 실행 흐름, 6. 재현성 | 행당 숫자 3개를 받아 점수·시간·A/B/판정 불가를 출력한다. |
+| 모드 1 입력 오류 재입력 | 1. 실행 방법, 6. 재현성 | 행·열 수 또는 숫자 파싱 오류는 안내 후 행렬 전체를 다시 입력받는다. |
+| 모드 2: <code>data.json</code> 분석 | 2-1. data.json 계약과 실패 격리, 4. 콘솔 로그 | <code>size_N</code> 키에서 N을 읽어 해당 필터를 선택하고 case별 결과를 남긴다. |
+| 라벨 정규화 | 2. 구현 요약, 2-1. data.json 계약 | <code>+</code>/<code>cross</code>는 Cross, <code>x</code>는 X로 표준화해 출력과 비교에 사용한다. |
+| 반복문 기반 MAC | 2. 구현 요약 | 외부 벡터화 라이브러리 없이 위치별 곱셈과 누적 덧셈을 수행한다. |
+| epsilon 기반 판정 | 2. 구현 요약, 5. 결과 리포트 | <code>abs(score_a - score_b) &lt; 1e-9</code>일 때만 UNDECIDED다. |
+| 성능 분석 | 5. 결과 리포트, 6. 재현성 | I/O를 제외한 MAC 구간을 최소 10회 반복하고 크기·평균 ms·N²를 함께 기록한다. |
+| 결과 요약과 실패 분석 | 4. 콘솔 로그, 5. 결과 리포트 | Total/PASS/FAIL, 실패 case ID·사유, 데이터·수치·로직 원인 분리를 제공한다. |
+| README 리포트와 O(N²) 근거 | 5. 결과 리포트 | 측정값과 연산 횟수를 연결한 10줄 이상 분석을 제공한다. |
+| 재현성과 자동 검증 | 6. 재현성, 7. 자동 검증 | 정상·동점·오류 사례와 테스트 실행 명령을 제공한다. |
+| 선택 보너스 | 2. 구현 요약, 5. 결과 리포트 | 패턴 생성기와 2D/1D 평탄화 비교를 필수 기능과 분리해 기록한다. |
+
+> 이 표는 README 문서의 요구사항 충족 범위를 나타낸다. 현재 구현의 실행 결과가 바뀌면 수치, case 결과, 스크린샷도 함께 갱신한다.
+
 ## 📷 실행 스크린샷 (Execution Screenshots)
 
 현재 저장소에는 모드 1 기준 입력을 실제로 실행해 캡처한 이미지가 있다. 이 캡처의 점수와 판정은 아래의 모드 1 기준 로그와 같으며, 측정 시간은 캡처 시점의 값(`0.0042 ms`)이다. 시간은 실행 시점마다 달라질 수 있으므로, 모드 2용 이미지는 아래 로그를 캡처한 **같은 실행 결과**로 추가한다.
@@ -49,6 +70,52 @@ python3 main.py
 - **성능 측정**: `measure_mac_time()`은 `mac()` 호출 구간만 `time.perf_counter()`로 감싸 10회 반복 평균을 ms 단위로 계산한다. 파일 읽기, 입력, 출력 시간은 측정 구간에서 제외했다.
 - **보너스 1 (패턴 생성기)**: `generate_cross_pattern(n)`, `generate_x_pattern(n)`이 임의 크기 N에 대해 Cross/X 패턴을 생성한다(짝수 N은 중심을 `n // 2` 행/열, X는 두 대각선 기준으로 정의). `data.json`에 없는 3×3 성능 표본과, 필터 로드에 실패한 크기의 대체 표본으로 재사용한다.
 - **보너스 2 (메모리 접근 최적화)**: `flatten()`으로 2차원 리스트를 길이 N²의 1차원 리스트로 변환하고, `mac_flat()`이 `flat[i]` 접근 방식으로 동일한 MAC 연산을 수행한다. `build_flatten_comparison_rows()`로 2D/1D 버전을 동일 입력·동일 반복 횟수로 비교했다(결과는 아래 5절 참고).
+
+## 2-1. data.json 계약과 실패 격리
+
+모드 2는 파일을 단순히 읽는 기능이 아니라, 키 규칙과 Grid 크기를 검증한 뒤 독립적인 case 결과를 만드는 배치 분석 기능이다. 최소 구조는 다음과 같다.
+
+~~~json
+{
+  "filters": {
+    "size_5": {
+      "cross": [[... 5 values ...], "..."],
+      "x": [[... 5 values ...], "..."]
+    }
+  },
+  "patterns": {
+    "size_5_1": {
+      "input": [[... 5 values ...], "..."],
+      "expected": "x"
+    }
+  }
+}
+~~~
+
+위 코드는 구조를 보여 주는 축약 예시다. 실제 <code>size_5</code> 아래 Grid는 모두 5×5여야 하며, <code>size_13</code>과 <code>size_25</code>도 같은 규칙을 따른다.
+
+| 단계 | 확인 내용 | 성공 시 | 실패 시 |
+|---|---|---|---|
+| size 키 해석 | <code>filters.size_N</code>, <code>patterns.size_N_idx</code> 형식과 N 추출 | 해당 N의 필터 묶음을 선택한다. | <code>INVALID_CASE_KEY</code> 또는 <code>FILTER_NOT_FOUND</code>로 해당 case만 FAIL 처리한다. |
+| 레이블 정규화 | filter 키와 <code>expected</code>를 Cross/X로 변환 | 표준 라벨로 점수·PASS/FAIL을 비교한다. | 알 수 없는 라벨 또는 정규화 뒤 중복은 스키마 오류로 남긴다. |
+| Grid 검증 | 2D 구조, 정방 n×n, 유한 숫자, 기대 N | 검증된 float Grid를 MAC에 전달한다. | <code>PATTERN_GRID_INVALID</code> 또는 <code>SIZE_MISMATCH</code>로 MAC을 건너뛴다. |
+| 점수와 판정 | Cross/X 각각 MAC, epsilon 비교 | Cross, X 또는 UNDECIDED를 만든다. | UNDECIDED는 유효한 판정 결과이지만 expected가 Cross/X이면 FAIL이다. |
+| 집계 | case 결과 하나당 상태 하나 | PASS 또는 FAIL을 1회 기록한다. | 오류가 있어도 다음 case를 계속 처리하며 <code>Total = PASS + FAIL</code>을 유지한다. |
+
+크기가 다른 패턴과 필터를 <code>zip()</code>으로 조용히 잘라 계산하면 안 된다. 올바른 흐름은 <strong>키 해석 → 정규화 → Grid 검증 → MAC → epsilon 판정 → expected 비교 → case 집계</strong>다.
+
+### 제출 전 요구사항 점검
+
+- [x] Python 3.8 이상, 표준 라이브러리만 사용, 실행 명령과 메뉴를 설명했다.
+- [x] 모드 1의 3×3 입력, 재입력 정책, 점수·시간·판정을 설명했다.
+- [x] 모드 2의 <code>size_5/13/25</code>, <code>size_N_idx</code>, case 단위 FAIL 지속 처리를 설명했다.
+- [x] Cross/X 정규화, 반복문 MAC, 엄격한 <code>abs(diff) &lt; 1e-9</code> 정책을 설명했다.
+- [x] 최소 10회 평균, ms, N², I/O 제외 측정 범위를 설명했다.
+- [x] case별 점수·판정·expected·상태와 전체 PASS/FAIL·실패 원인·O(N²) 리포트를 제공했다.
+- [x] 정상·동점·오류 재현 방법과 자동 테스트 명령을 제공했다.
+- [x] 1D 평탄화와 패턴 생성기는 선택 보너스이며, 동일 입력·동일 반복 조건의 별도 비교로 설명했다.
+
+성능 표의 <code>N²</code>는 패턴 하나와 필터 하나 사이의 MAC 1회 기준이다. Cross/X 두 필터를 모두 채점하는 전체 비교 비용은 <code>2N²</code>이지만, 상수항을 제외한 시간 복잡도는 여전히 <code>O(N²)</code>다.
 
 ## 3. 실행 흐름
 

@@ -417,6 +417,7 @@ footer code { font-size: 0.95em; }
     <p class="tagline">main.py · README · docs 전수 반영 교안</p>
     <button class="mobile-toggle" id="sidebar-toggle" onclick="toggleSidebar()" aria-controls="toc-list" aria-expanded="false">☰ 목차</button>
     <ul id="toc-list">
+        <li><a href="#code-reading">0. 코드 해석 순서</a></li>
         <li><a href="#overview">1. 미션 개요 &amp; MAC 원리</a></li>
         <li><a href="#architecture">2. main.py 구조 &amp; Python 3.8</a></li>
         <li><a href="#simulator">3. 🧪 MAC 실시간 계산기</a></li>
@@ -426,8 +427,10 @@ footer code { font-size: 0.95em; }
         <li><a href="#complexity">7. 📈 O(N²) 계산기 &amp; 차트</a></li>
         <li><a href="#flat">8. ⚡ 1차원 평탄화 최적화</a></li>
         <li><a href="#verify">9. 자동 검증 &amp; 함정 점검표</a></li>
-        <li><a href="#quiz">10. 🧩 실전 학습 퀴즈</a></li>
-    </ul>
+       <li><a href="#quiz">10. 🧩 실전 학습 퀴즈</a></li>
+       <li><a href="#oral-master">11. 🎤 발표·질문 대응</a></li>
+        <li><a href="#submission">12. 📝 제출·리포트 점검</a></li>
+   </ul>
 </aside>
 
 <main>
@@ -443,6 +446,104 @@ footer code { font-size: 0.95em; }
             <span class="chip">단일 HTML · file:// 실행 가능</span>
         </div>
     </div>
+
+    <!-- ============ 0 ============ -->
+    <section id="code-reading">
+        <h2>0. 코드를 해석하는 순서</h2>
+        <p>코드를 위에서 아래로 모두 읽는 대신, <strong>실행 흐름 하나를 끝까지 추적</strong>하는 방식으로 읽습니다. 이 과제에서는 <code>main</code>에서 시작해 입력이 검증되고, MAC 점수가 계산되고, 판정과 출력으로 끝나는 경로를 먼저 잡으면 됩니다.</p>
+
+        <div class="callout callout-info">
+            <p><strong>핵심 원칙:</strong> 함수 이름만 외우지 말고, 각 함수에 대해 <code>입력은 무엇인가</code>, <code>무엇을 보장하는가</code>, <code>실패하면 무엇을 반환하는가</code>, <code>다음에 누가 사용하는가</code>의 네 가지를 확인합니다.</p>
+        </div>
+
+        <h3>0-1. 진입점부터 호출 흐름을 그린다</h3>
+        <p>가장 먼저 <code>main()</code>을 열어 프로그램의 큰 갈림길을 확인합니다. 세부 구현을 바로 파고들기보다, 아래처럼 함수 사이의 화살표를 메모합니다.</p>
+        <pre><code>모드 1: 사용자 입력
+main
+  -&gt; read_grid_3x3
+  -&gt; validate_grid
+  -&gt; mac (필터 A, 필터 B)
+  -&gt; judge_scores
+  -&gt; 출력
+
+모드 2: JSON 분석
+main
+  -&gt; load_data_json / 키와 레이블 정규화
+  -&gt; validate_grid
+  -&gt; analyze_case
+      -&gt; mac (Cross, X)
+      -&gt; judge_scores
+      -&gt; compare_with_expected
+  -&gt; 케이스별 결과 및 요약 출력</code></pre>
+        <p>이 화살표가 먼저 보이면 함수 내부의 한 줄을 잠시 몰라도 전체 역할을 잃지 않습니다. 코드를 설명할 때도 "입력 → 검증 → 계산 → 판정 → 출력" 순서로 말하면 됩니다.</p>
+
+        <h3>0-2. 함수 하나는 네 번 읽는다</h3>
+        <div class="table-wrap">
+        <table class="wide">
+            <thead><tr><th>읽는 위치</th><th>확인할 질문</th><th>이 과제에서의 예</th></tr></thead>
+            <tbody>
+                <tr><td>1. 함수 시그니처</td><td>무엇을 받아 무엇을 돌려주는가?</td><td><code>mac(pattern, filter_grid) -&gt; float</code>는 두 검증된 Grid를 받아 점수만 반환한다.</td></tr>
+                <tr><td>2. 초반 조건문</td><td>호출 전에 보장돼야 하는 조건은 무엇인가?</td><td><code>validate_grid</code>가 크기, 숫자, <code>bool</code>, <code>NaN</code>을 먼저 거른다.</td></tr>
+                <tr><td>3. 반복문과 누적값</td><td>반복마다 무엇이 변하고, 무엇이 유지되는가?</td><td><code>mac</code>에서는 같은 위치의 두 값을 곱하고 <code>total</code>에 누적한다.</td></tr>
+                <tr><td>4. 반환과 호출자</td><td>성공/실패 결과를 다음 단계가 어떻게 해석하는가?</td><td><code>judge_scores</code>의 <code>UNDECIDED</code>는 예상 답과 비교할 때 <code>FAIL</code> 사유가 된다.</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h3>0-3. 정상 경로와 실패 경로를 각각 한 번 추적한다</h3>
+        <p>정상 입력만 따라가면 왜 검증 함수와 오류 코드가 필요한지 이해하기 어렵습니다. 아래 두 경로를 나란히 따라갑니다.</p>
+        <div class="card">
+            <h4>정상 경로</h4>
+            <pre><code>raw pattern / raw filter
+  -&gt; validate_grid 성공: 정규화된 float Grid, size 반환
+  -&gt; mac으로 Cross 점수와 X 점수 계산
+  -&gt; judge_scores로 Cross / X / UNDECIDED 결정
+  -&gt; expected와 비교해 PASS 또는 FAIL 출력</code></pre>
+            <h4>실패 경로</h4>
+            <pre><code>raw pattern
+  -&gt; validate_grid 실패: 오류 메시지 또는 reason_code 반환
+  -&gt; mac을 호출하지 않음
+  -&gt; 해당 JSON case만 FAIL로 기록
+  -&gt; 다음 case는 계속 분석</code></pre>
+        </div>
+        <p>실패한 뒤에 MAC을 실행하지 않는 이유는 잘못된 크기나 숫자 때문에 생기는 예외 또는 조용한 오답을 막기 위해서입니다. 오류가 둘 이상이면 코드에 적힌 검사 순서상 <strong>먼저 통과하지 못한 게이트</strong>가 사유가 됩니다.</p>
+
+        <h3>0-4. 데이터 흐름과 정책 흐름을 분리한다</h3>
+        <div class="table-wrap">
+        <table>
+            <thead><tr><th>구분</th><th>대표 함수/코드</th><th>해석 방법</th></tr></thead>
+            <tbody>
+                <tr><td>데이터 변환</td><td><code>read_grid_3x3</code>, JSON 로드, Grid 생성</td><td>문자열 또는 JSON을 프로그램이 다룰 수 있는 구조로 바꾼다.</td></tr>
+                <tr><td>입력 계약</td><td><code>validate_grid</code>, 레이블/크기 키 정규화</td><td>"이 뒤의 계산 함수는 올바른 n×n 유한 숫자 Grid만 받는다"는 전제를 만든다.</td></tr>
+                <tr><td>순수 계산</td><td><code>mac</code>, 1D MAC</td><td>외부 상태와 출력 없이, 같은 입력이면 같은 점수를 반환하는지 본다.</td></tr>
+                <tr><td>판정 정책</td><td><code>judge_scores</code>, <code>compare_with_expected</code></td><td>점수 차이와 <code>EPSILON</code>을 어떤 레이블과 상태로 바꿀지 정한다.</td></tr>
+                <tr><td>표현</td><td>케이스 출력, 요약 출력</td><td>이미 만들어진 결과를 보여 줄 뿐 계산 규칙을 바꾸면 안 된다.</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h3>0-5. 성능 코드는 반복되는 경로부터 본다</h3>
+        <p>성능 문제는 함수의 줄 수가 아니라 <strong>얼마나 자주 실행되는가</strong>로 찾습니다. <code>mac</code>의 중첩 반복은 필터 하나마다 <code>N²</code>번 실행되므로 핫 패스입니다. 이 안에 있는 인덱싱, <code>Grid.get()</code> 호출, 경계 검사, 객체 생성은 모두 N²번 반복될 수 있습니다.</p>
+        <pre><code>for row in range(size):
+    for column in range(size):
+        total += pattern[row][column] * filter_grid[row][column]
+
+# 1D 평탄화에서는 (row, column)을 하나의 index로 바꾼다.
+index = row * size + column</code></pre>
+        <p>따라서 1D 최적화는 방문 횟수를 줄여 <code>O(N²)</code>를 바꾸는 것이 아니라, 반복 한 번당 드는 접근·추상화 비용을 줄이는 시도입니다. 시간 측정은 이 루프 안에 넣지 않고, 여러 번의 MAC 호출을 감싼 바깥에서 수행해야 계측 비용이 결과를 왜곡하지 않습니다.</p>
+
+        <h3>0-6. 편집기에서 빠르게 따라가는 방법</h3>
+        <ol class="bullets">
+            <li>호출하는 함수 이름 위에서 <kbd>F12</kbd> 또는 <kbd>Ctrl</kbd>+클릭으로 정의로 이동한다. macOS에서는 <kbd>Cmd</kbd>+클릭을 사용한다.</li>
+            <li>정의에서 호출한 곳으로 돌아갈 때는 <kbd>Alt</kbd>+<kbd>←</kbd>를 사용한다. macOS에서는 보통 <kbd>Ctrl</kbd>+<kbd>-</kbd>가 뒤로 가기다.</li>
+            <li>함수 이름을 검색한 뒤, 정의 1곳과 호출 지점들을 비교한다. 같은 함수라도 모드 1과 모드 2에서 실패 처리 방식이 다를 수 있다.</li>
+            <li>한 번에 한 경로만 표시한다. 예를 들어 먼저 정상 JSON 케이스를, 다음에는 크기 오류 케이스를 추적한다.</li>
+        </ol>
+
+        <div class="callout callout-success">
+            <p><strong>평가 답변 틀:</strong> "<code>main</code>은 흐름을 연결하고, <code>validate_grid</code>는 계산 전 입력 계약을 보장하며, <code>mac</code>은 점수만 계산하고, <code>judge_scores</code>가 epsilon 정책을 적용합니다. 그래서 오류 처리와 연산 로직을 독립적으로 설명하고 테스트할 수 있습니다."</p>
+        </div>
+    </section>
 
     <!-- ============ 1 ============ -->
     <section id="overview">
@@ -1046,9 +1147,325 @@ if not isinstance(value, (int, float)):
             <p style="margin-bottom:0.8rem;">점수: <strong id="quiz-score" style="font-family:var(--font-code);color:var(--accent-success);font-size:1.1rem;">0 / 8</strong></p>
             <button class="btn ghost" onclick="resetQuiz()">퀴즈 다시 풀기</button>
         </div>
+   </section>
+
+    <!-- ============ 11 ============ -->
+    <section id="oral-master">
+        <h2>11. 발표·질문 대응 완성 교안</h2>
+        <p>이 절은 <code>docs/study</code>의 핵심 내용을 한 번에 연결한 발표용 학습 노트입니다. 아래 순서를 따라 설명하면 구현의 목적, 계산 근거, 오류 처리, 성능 해석을 끊기지 않고 말할 수 있습니다.</p>
+
+        <div class="callout callout-success">
+            <p><strong>암기할 전체 문장:</strong> "입력을 먼저 검증하고, 레이블과 크기를 정규화한 뒤, 같은 크기의 필터와 MAC 점수를 계산합니다. 점수 차이는 epsilon 정책으로 판정하고, 예상 답과 비교해 케이스별 PASS 또는 FAIL을 기록합니다. 성능은 I/O를 제외한 순수 MAC 구간에서 측정하며, 1D 평탄화는 복잡도를 낮추는 것이 아니라 반복당 접근 비용을 줄이는 최적화입니다."</p>
+        </div>
+
+        <h3>11-1. 5분 설명을 만드는 학습 순서</h3>
+        <ol class="bullets">
+            <li><strong>문제:</strong> 숫자 행렬 패턴이 Cross와 X 중 어떤 필터에 더 잘 맞는지 판정한다.</li>
+            <li><strong>입력 계약:</strong> 계산 전에 n×n 유한 숫자 Grid인지 확인하고, 잘못된 입력은 MAC 전에 막는다.</li>
+            <li><strong>계산:</strong> 같은 위치의 값을 곱해 모두 더하는 MAC으로 필터마다 점수를 만든다.</li>
+            <li><strong>판정:</strong> 두 점수 차이가 <code>EPSILON</code>보다 작으면 <code>UNDECIDED</code>, 아니면 더 큰 점수의 레이블을 선택한다.</li>
+            <li><strong>검증:</strong> 예상 레이블과 비교해 PASS/FAIL을 남기고, JSON 모드에서는 실패한 케이스가 있어도 다음 케이스를 계속 처리한다.</li>
+            <li><strong>성능:</strong> 필터 하나의 MAC은 <code>N²</code>, Cross와 X 두 필터를 비교하면 <code>2N²</code> 위치를 방문한다.</li>
+            <li><strong>최적화:</strong> 1D 평탄화와 수치 라이브러리는 상수 비용을 줄이는 방법이며, 실제 개선은 같은 입력과 같은 반복 조건에서 측정으로 확인한다.</li>
+        </ol>
+
+        <div class="card">
+            <h4>90초 전체 설명 스크립트</h4>
+            <p>"이 프로그램은 패턴을 숫자 행렬로 받고 Cross와 X 필터에 각각 MAC 연산을 수행합니다. MAC은 같은 위치의 값을 곱해 누적하는 내적입니다. 하지만 계산 전에 Grid가 비어 있지 않은 정사각형인지, 모든 값이 유한 숫자인지 먼저 검증합니다. 검증이 끝난 데이터만 계산 함수로 넘기므로 오류 처리와 연산 로직이 섞이지 않습니다. 두 점수는 부동소수점 오차를 고려해 epsilon으로 비교하고, 차이가 충분히 작으면 UNDECIDED로 처리합니다. JSON 모드에서는 잘못된 케이스를 FAIL로 기록하되 분석 전체는 멈추지 않습니다. 성능 측정은 입력과 출력이 아니라 순수 MAC 반복 구간만 비교했고, 1D 버전은 O(N²)를 O(N)으로 바꾼 것이 아니라 Python의 반복 접근 비용을 줄이는 구현 최적화입니다."</p>
+        </div>
+
+        <h3>11-2. 코드 구조를 역할 단위로 설명하기</h3>
+        <div class="table-wrap">
+        <table class="wide">
+            <thead><tr><th>레이어</th><th>대표 역할</th><th>말로 설명할 문장</th><th>섞으면 생기는 문제</th></tr></thead>
+            <tbody>
+                <tr><td>입력·파일 I/O</td><td><code>main</code>, 사용자 입력, JSON 로드</td><td>"사용자 또는 파일에서 원본 데이터를 받고, 어느 모드로 갈지 연결합니다."</td><td>계산 함수가 파일 형식과 화면 출력에 의존해 단위 테스트가 어려워진다.</td></tr>
+                <tr><td>검증·정규화</td><td><code>validate_grid</code>, <code>normalize_label</code>, size 키 파싱</td><td>"계산 함수가 믿고 사용할 데이터 계약을 먼저 만듭니다."</td><td>잘못된 크기나 타입이 MAC 도중 예외 또는 조용한 오답으로 바뀐다.</td></tr>
+                <tr><td>핵심 계산</td><td><code>mac</code>, 1D MAC</td><td>"이 함수는 검증된 두 Grid에서 점수만 계산합니다."</td><td>입력, 출력, 시간 측정이 섞여 결과와 성능을 따로 확인하기 어렵다.</td></tr>
+                <tr><td>판정 정책</td><td><code>judge_scores</code>, 예상 답 비교</td><td>"점수 차이를 어떤 레이블과 상태로 해석할지 한곳에 모읍니다."</td><td>동점 규칙이 여러 곳에 중복돼 모드별 결과가 달라질 수 있다.</td></tr>
+                <tr><td>결과·집계</td><td>케이스 결과, 요약 출력</td><td>"모든 케이스를 PASS 또는 FAIL 하나로 기록하고 합계를 만듭니다."</td><td>실패 케이스가 누락돼 <code>Total = PASS + FAIL</code>이 깨질 수 있다.</td></tr>
+                <tr><td>성능 측정</td><td><code>measure_mac_time</code></td><td>"공통 I/O가 아니라 순수 MAC 반복 구간만 재서 구현 차이를 비교합니다."</td><td>파일 읽기와 print 비용이 계산 성능 차이를 가린다.</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h3>11-3. 입력 계약: MAC 전에 반드시 확인할 것</h3>
+        <p>MAC은 두 Grid의 모든 같은 위치를 접근합니다. 따라서 크기나 값이 잘못된 입력은 먼저 제거해야 합니다. 발표에서는 "검증은 오류를 친절하게 보여 주는 기능이면서, 계산 함수의 전제를 보장하는 경계"라고 설명하면 됩니다.</p>
+        <div class="table-wrap">
+        <table class="wide">
+            <thead><tr><th>검증 항목</th><th>왜 필요한가</th><th>실패 예</th><th>처리 원칙</th></tr></thead>
+            <tbody>
+                <tr><td>비어 있지 않은 2D 리스트</td><td>행과 열을 순회할 수 있어야 한다.</td><td><code>[]</code>, 문자열, 1D 리스트</td><td>계산 전에 오류를 반환한다.</td></tr>
+                <tr><td>모든 행이 리스트</td><td>행 단위 인덱싱 구조를 보장한다.</td><td><code>[[1, 0], 1]</code></td><td>해당 Grid를 거부한다.</td></tr>
+                <tr><td>정사각형 n×n</td><td>패턴과 필터의 위치가 하나씩 정확히 대응해야 한다.</td><td>3×2, 행 길이가 다른 배열</td><td>크기 오류로 FAIL 처리하고 MAC을 호출하지 않는다.</td></tr>
+                <tr><td>기대 크기 일치</td><td><code>size_5</code> 필터에는 5×5 데이터가 있어야 한다.</td><td><code>size_5</code> 아래의 3×3 Grid</td><td>선언된 크기와 실제 데이터를 함께 검증한다.</td></tr>
+                <tr><td>유한 숫자</td><td>곱셈과 비교가 의미 있는 값이어야 한다.</td><td><code>"one"</code>, <code>NaN</code>, <code>Infinity</code></td><td>숫자 변환 및 <code>isfinite</code> 검사에서 거부한다.</td></tr>
+                <tr><td><code>bool</code> 명시적 거부</td><td>Python에서 <code>bool</code>은 <code>int</code>의 하위 타입이다.</td><td><code>True</code>, <code>False</code></td><td>숫자 검사보다 먼저 거부해 1/0으로 조용히 계산되는 일을 막는다.</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="callout callout-warn">
+            <p><strong>Mode 1과 Mode 2의 실패 정책은 목적이 다릅니다.</strong> Mode 1은 사용자가 입력을 고칠 수 있으므로 한 행이라도 틀리면 3행 전체를 다시 입력하게 해 실제 계산 대상이 무엇인지 혼동하지 않게 합니다. Mode 2는 데이터셋을 분석하는 배치 처리이므로 해당 case만 FAIL로 기록하고 다음 case를 계속 처리합니다.</p>
+        </div>
+
+        <h3>11-4. 키와 레이블을 읽는 방법</h3>
+        <p>JSON의 <code>size_3</code>, <code>size_5</code> 같은 키는 단순 문자열이 아니라 데이터 계약이다. 접두사를 확인하고, 뒤의 크기를 양의 정수로 바꾸며, 실제 Grid 크기까지 맞는지 확인해야 한다.</p>
+        <ol class="bullets">
+            <li><code>size_</code> 접두사가 있는지 확인한다.</li>
+            <li>접두사 뒤 값이 비어 있지 않은 양의 정수인지 확인한다.</li>
+            <li>추출한 N과 실제 행·열 수가 N인지 확인한다.</li>
+            <li>필터 레이블을 정규화한다: <code>+</code>, <code>cross</code>, <code>Cross</code>는 <code>Cross</code>; <code>x</code>, <code>X</code>는 <code>X</code>.</li>
+            <li>정규화 뒤 같은 레이블이 두 번 나오면 어느 필터를 써야 할지 모호하므로 덮어쓰지 않고 오류로 처리한다.</li>
+        </ol>
+        <p>새 레이블 <code>O</code>를 추가할 때도 순서는 같다. 정규화 규칙과 스키마를 확장하고, 필터를 검증하고, 정상·중복·동점 테스트를 추가한 뒤, 매칭·판정·출력을 확장한다. 반복 순서에 따라 임의의 1위를 고르는 정책은 피하고, 동점이면 <code>UNDECIDED</code> 또는 명시된 결정적 우선순위를 사용한다.</p>
+
+        <h3>11-5. MAC을 손으로 설명하는 법</h3>
+        <p>MAC은 <strong>같은 위치끼리 곱하고, 모든 칸의 곱을 더하는 연산</strong>이다. 0/1 패턴에서는 1이 함께 있는 칸의 수를 세는 것과 같은 결과가 나온다.</p>
+        <span class="formula">score = Σ Pattern[r][c] × Filter[r][c]</span>
+        <div class="card">
+            <h4>기준 예제: X 패턴을 두 필터와 비교</h4>
+            <pre><code>X 패턴                 Cross 필터              X 필터
+1 0 1                  0 1 0                  1 0 1
+0 1 0                  1 1 1                  0 1 0
+1 0 1                  0 1 0                  1 0 1
+
+X × Cross = 1.0        X × X = 5.0
+따라서 Cross보다 X 점수가 크므로 prediction은 X이다.</code></pre>
+            <p>이 예에서는 필터 A를 Cross, 필터 B를 X라고 보조로 부를 수 있지만, 결과를 설명할 때는 A/B보다 <code>Cross=1.0, X=5.0, prediction=X</code>처럼 정식 레이블을 사용하면 혼동이 적다.</p>
+        </div>
+
+        <div class="table-wrap">
+        <table>
+            <thead><tr><th>크기 N</th><th class="num">필터 하나의 MAC 위치 수</th><th class="num">Cross/X 두 필터의 위치 수</th><th class="num">자기 일치 점수 (홀수 N)</th><th class="num">Cross와 X 불일치 점수</th></tr></thead>
+            <tbody>
+                <tr><td>3×3</td><td class="num">9</td><td class="num">18</td><td class="num">5</td><td class="num">1</td></tr>
+                <tr><td>5×5</td><td class="num">25</td><td class="num">50</td><td class="num">9</td><td class="num">1</td></tr>
+                <tr><td>13×13</td><td class="num">169</td><td class="num">338</td><td class="num">25</td><td class="num">1</td></tr>
+                <tr><td>25×25</td><td class="num">625</td><td class="num">1,250</td><td class="num">49</td><td class="num">1</td></tr>
+            </tbody>
+        </table>
+        </div>
+        <p><strong>자주 하는 혼동:</strong> <code>N²</code>는 모든 위치를 방문하는 연산량이고, Cross가 자기 자신과 겹쳐 얻는 점수는 홀수 N에서 <code>2N-1</code>이다. 예를 들어 25×25의 <code>625</code>는 필터 하나와의 MAC 횟수이지, Cross 자기 일치 점수나 두 필터 전체 분류 비용이 아니다.</p>
+
+        <h3>11-6. 부동소수점과 epsilon을 정확히 말하기</h3>
+        <p>컴퓨터는 대부분의 실수를 이진 부동소수점으로 저장한다. 십진수 <code>0.1</code>처럼 이진수로 정확히 끝나지 않는 값은 근삿값으로 저장되고, 곱셈과 누적 덧셈 뒤 아주 작은 차이가 남을 수 있다.</p>
+        <pre><code>if abs(score_cross - score_x) &lt; EPSILON:
+    prediction = "UNDECIDED"
+elif score_cross &gt; score_x:
+    prediction = "Cross"
+else:
+    prediction = "X"</code></pre>
+        <div class="table-wrap">
+        <table>
+            <thead><tr><th>상황</th><th>판정</th><th>바로 말할 설명</th></tr></thead>
+            <tbody>
+                <tr><td>차이 &lt; <code>1e-9</code></td><td><code>UNDECIDED</code></td><td>"오차 범위 안에서는 어느 점수가 큰지 신뢰성 있게 구분하지 않습니다."</td></tr>
+                <tr><td>차이 = <code>1e-9</code></td><td>동점 아님</td><td>"명세가 <code>&lt;</code>이므로 경계값은 UNDECIDED가 아닙니다. <code>&lt;=</code>로 바꾸면 정책이 달라집니다."</td></tr>
+                <tr><td><code>UNDECIDED</code>, expected가 X 또는 Cross</td><td><code>FAIL</code></td><td>"판정 결과가 기대 레이블과 다르므로 테스트 통과가 아닙니다."</td></tr>
+                <tr><td>일반 벡터의 큰 내적</td><td>조건부 해석</td><td>"이 과제에서는 고정된 이진 필터의 겹침 점수입니다. 일반적인 방향 유사도는 정규화 또는 코사인 유사도가 필요합니다."</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h3>11-7. JSON case가 FAIL이어도 전체 분석을 계속하는 이유</h3>
+        <p>Mode 2의 목적은 데이터셋 전체의 품질과 판정 결과를 보는 것이다. 그래서 한 case의 실패가 다음 case의 분석을 막으면 안 된다. 각 case는 아래처럼 하나의 결과 객체로 남기고, 마지막에는 PASS와 FAIL을 합산한다.</p>
+        <pre><code>case_id / size / expected / prediction
+score_cross / score_x
+status = PASS 또는 FAIL
+reason_code / reason_message
+
+항상 Total = PASS + FAIL</code></pre>
+        <div class="table-wrap">
+        <table class="wide">
+            <thead><tr><th>대표 실패</th><th>MAC 실행 여부</th><th>설명 방식</th></tr></thead>
+            <tbody>
+                <tr><td><code>INVALID_CASE_KEY</code>, <code>FILTER_NOT_FOUND</code></td><td>실행 안 함</td><td>"케이스 이름 또는 필요한 필터를 해석할 수 없어 계산 전에 격리했습니다."</td></tr>
+                <tr><td><code>PATTERN_GRID_INVALID</code></td><td>실행 안 함</td><td>"패턴이 Grid 계약을 만족하지 않아 안전한 연산 대상이 아닙니다."</td></tr>
+                <tr><td><code>SIZE_MISMATCH</code></td><td>실행 안 함</td><td>"같은 위치끼리 곱할 수 없으므로 크기 검증에서 종료합니다."</td></tr>
+                <tr><td><code>EXPECTED_LABEL_INVALID</code></td><td>점수 계산 뒤 비교 실패</td><td>"계산 결과가 있어도 예상 레이블이 유효하지 않아 PASS/FAIL 기준을 만들 수 없습니다."</td></tr>
+                <tr><td><code>UNDECIDED</code></td><td>실행함</td><td>"두 점수를 계산했지만 epsilon 안에서 동점이어서 단일 레이블을 고르지 못했습니다."</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h3>11-8. 성능 측정과 1D 평탄화를 정확히 설명하기</h3>
+        <div class="card">
+            <h4>측정 범위</h4>
+            <p><strong>순수 MAC 벤치마크</strong>는 검증이 끝난 Grid로 <code>mac</code>만 여러 번 반복해 측정한다. 파일 읽기, JSON 파싱, <code>print</code>, 사용자 입력, Grid 생성은 별도의 end-to-end 측정으로 분리한다. I/O를 측정할 수 없는 것이 아니라, 공통 I/O가 2D와 1D 계산 차이를 가리므로 목적에 맞게 지표를 나누는 것이다.</p>
+            <pre><code>started = perf_counter()
+for _ in range(repeats):
+    mac_function(pattern, filter_grid)
+elapsed_per_call = (perf_counter() - started) / repeats</code></pre>
+            <p>타이머는 MAC 내부의 원소 루프가 아니라 반복 전체의 바깥에 둔다. 루프 안에서 시간을 재면 계측 호출 자체가 N²번 들어가 결과를 왜곡한다.</p>
+        </div>
+        <div class="table-wrap">
+        <table class="wide">
+            <thead><tr><th>질문</th><th>정확한 답변</th></tr></thead>
+            <tbody>
+                <tr><td>왜 시간 비율이 원소 수 비율과 정확히 같지 않은가?</td><td>모든 원소를 방문하므로 추세는 N²지만, 작은 입력에서는 함수 호출·타이머 같은 고정 비용이 크고, 큰 입력에서는 캐시·메모리 접근·CPU 주파수·운영체제 환경이 영향을 준다.</td></tr>
+                <tr><td>1D가 왜 더 빠를 수 있는가?</td><td><code>flat[row * size + column]</code>으로 접근하면 행 리스트를 다시 찾는 참조와 <code>Grid.get()</code> 같은 추상화 비용을 줄일 가능성이 있다.</td></tr>
+                <tr><td>1D가 O(N²)를 O(N)으로 바꾸는가?</td><td>아니다. 방문 위치 수는 같고, 반복 한 번당 비용을 줄이는 상수 시간 최적화다.</td></tr>
+                <tr><td>1D의 float가 모두 물리적으로 붙어 있다고 말해도 되는가?</td><td>아니다. Python 리스트는 객체 참조를 저장한다. 단일 리스트를 순차 접근해 참조와 구조적 오버헤드를 줄일 수 있다고 설명한다.</td></tr>
+                <tr><td>관측된 2D/1D 차이를 원인으로 단정해도 되는가?</td><td>아니다. 메서드 호출, 경계 검사, 캐시 등은 합리적 가설이며, 정확한 기여도는 프로파일링으로 확인해야 한다.</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="callout callout-info">
+            <p><strong>측정 기록을 읽는 법:</strong> 3×3에서 13×13으로 가면 원소 수는 약 18.8배, 25×25로 가면 약 69.4배다. 어제 기록한 실행 시간 비율은 특정 구현·환경에서의 관측값으로 표기하고, "N² 경향을 보인다"까지만 일반화한다. 절대 ms 값과 개선 배수는 Python 버전, CPU, 반복 수, 실행 환경에 따라 달라진다.</p>
+        </div>
+
+        <h3>11-9. CPU와 NPU 병렬 처리의 차이</h3>
+        <p>현재 Python 중첩 루프는 기본적으로 CPU에서 순차 실행된다. Cross와 X 두 필터를 비교하면 각각 독립적인 MAC이므로, 필터 단위 또는 충분히 큰 행·인덱스 구간 단위로 병렬화할 수 있다. 원소 하나마다 작업을 만들면 작업 생성과 병합 비용이 더 커질 수 있다.</p>
+        <div class="table-wrap">
+        <table>
+            <thead><tr><th>관점</th><th>설명</th><th>병목</th></tr></thead>
+            <tbody>
+                <tr><td>CPU 직렬</td><td>Python 루프가 N² 위치를 차례로 방문한다.</td><td>인터프리터 루프, 인덱싱, 메모리 접근</td></tr>
+                <tr><td>CPU 병렬</td><td>독립 필터 또는 큰 데이터 덩어리를 작업자에게 나눈다.</td><td>스레드/프로세스 생성, 동기화, 결과 병합, 메모리 대역폭</td></tr>
+                <tr><td>NPU/GPU</td><td>많은 MAC 유닛이 곱셈-누적을 동시에 수행한다.</td><td>호스트-가속기 전송, 메모리 대역폭, 커널 실행, 작은 배치의 낮은 활용률</td></tr>
+            </tbody>
+        </table>
+        </div>
+        <p><strong>바로 말하기:</strong> "NPU 유닛이 1,000개면 이론적으로 많은 MAC을 동시에 할 수 있지만, 실제 속도는 1,000배가 아닙니다. 데이터를 메모리에서 가져오고 가속기로 전송하고 결과를 합치는 비용이 있기 때문입니다. 그래서 한 번 전송한 데이터를 여러 패턴과 필터로 묶어 처리하는 배치 방식이 유리합니다."</p>
+
+        <h3>11-10. 손으로 해 보는 수동 테스트 체크리스트</h3>
+        <p>아래는 기능 설명을 실제 동작으로 연결하는 최소 수동 검증 시나리오다. 기록할 때는 테스트명, 날짜, PASS/FAIL, 확인한 출력, 실행 환경을 함께 남긴다.</p>
+        <div class="table-wrap">
+        <table class="wide">
+            <thead><tr><th>테스트</th><th>입력 또는 조건</th><th>기대 결과</th><th>설명 포인트</th></tr></thead>
+            <tbody>
+                <tr><td>행 길이 오류</td><td>Mode 1에 <code>1 0</code> 또는 <code>1 0 1 0</code> 입력</td><td>형식 안내 후 3행 전체 재입력, Traceback 없음</td><td>부분 입력을 보존하면 실제 계산 대상이 모호해진다.</td></tr>
+                <tr><td>숫자·유한값 오류</td><td><code>1 a 0</code>, <code>nan 0 0</code>, <code>inf 0 0</code></td><td>제어된 오류 후 재입력, crash 없음</td><td>변환 가능성만이 아니라 유한 숫자까지 확인한다.</td></tr>
+                <tr><td>bool 거부</td><td>JSON Grid에 <code>true</code>, <code>false</code></td><td>Grid 검증 FAIL, MAC 미실행</td><td>Python의 bool/int 관계를 명시적으로 방어한다.</td></tr>
+                <tr><td>epsilon 동점</td><td>두 점수 차이가 <code>1e-9</code>보다 작은 케이스</td><td><code>UNDECIDED</code></td><td>화면상 같아 보여도 근사 비교 정책이 적용된다.</td></tr>
+                <tr><td>경계값</td><td>차이가 정확히 <code>1e-9</code></td><td>동점 아님</td><td><code>&lt;</code>와 <code>&lt;=</code>의 차이를 확인한다.</td></tr>
+                <tr><td>크기 불일치</td><td>예: size_13 케이스에 10×10 Grid</td><td><code>SIZE_MISMATCH</code>, 다음 case 계속</td><td>MAC 전에 격리하고 배치 전체를 멈추지 않는다.</td></tr>
+                <tr><td>잘못된 expected</td><td><code>expected = "circle"</code></td><td><code>EXPECTED_LABEL_INVALID</code> FAIL</td><td>계산 점수와 정답 비교 규칙은 별개의 책임이다.</td></tr>
+                <tr><td>성능 표</td><td>3, 5, 13, 25 크기와 반복 횟수 기록</td><td>9, 25, 169, 625의 N² 경향 확인</td><td>절대 ms가 아니라 단위, 반복 수, 추세를 비교한다.</td></tr>
+            </tbody>
+        </table>
+        </div>
+        <p>자동 테스트는 현재 테스트 스위트를 통해 검증한다. Windows와 일반 Python 환경에서는 <code>python -m unittest discover -s tests -v</code> 형태로 실행할 수 있다. 테스트 개수는 코드 변경에 따라 달라질 수 있으므로 고정 숫자보다 Grid 검증, MAC, epsilon 경계, 레이블 중복, JSON 오류, 1D 결과 동일성, 성능 repeat 검증 범위를 확인한다.</p>
+
+        <h3>11-11. 평가 질문 즉답 카드</h3>
+        <div class="table-wrap">
+        <table class="wide">
+            <thead><tr><th>질문</th><th>바로 답할 문장</th></tr></thead>
+            <tbody>
+                <tr><td>왜 검증을 MAC보다 먼저 하나요?</td><td>"MAC은 같은 위치를 전제로 접근합니다. 잘못된 크기나 값으로 계산하면 예외 또는 조용한 오답이 생기므로, 계산 가능한 Grid 계약을 먼저 보장합니다."</td></tr>
+                <tr><td>왜 bool을 따로 막나요?</td><td>"Python에서는 bool이 int의 하위 타입이라 True/False가 1/0으로 계산될 수 있습니다. 데이터 의미가 바뀌지 않도록 숫자 검사 전에 거부합니다."</td></tr>
+                <tr><td>왜 레이블을 정규화하나요?</td><td>"입력 표기 차이 때문에 같은 정답이 FAIL이 되지 않게 +, cross, Cross를 하나의 Cross로 통일합니다. 정규화 뒤 중복은 모호하므로 오류입니다."</td></tr>
+                <tr><td>왜 epsilon이 필요한가요?</td><td>"십진 소수는 이진 부동소수점에 정확히 저장되지 않을 수 있어서, 의미상 동점인 점수를 ==로 비교하면 잘못 갈릴 수 있습니다."</td></tr>
+                <tr><td>차이가 정확히 1e-9면 동점인가요?</td><td>"아닙니다. 이 과제 규칙은 abs 차이가 epsilon보다 작을 때만 동점이므로, 정확히 같은 값은 큰 점수 쪽을 선택합니다."</td></tr>
+                <tr><td>UNDECIDED인데 expected가 X면 PASS인가요?</td><td>"아닙니다. UNDECIDED는 X와 다른 판정이므로 expected 비교에서는 FAIL입니다."</td></tr>
+                <tr><td>25×25의 625는 무엇인가요?</td><td>"필터 하나와 패턴 하나 사이의 MAC 1회에서 방문하는 위치 수입니다. Cross와 X 두 필터를 모두 채점하면 1,250입니다."</td></tr>
+                <tr><td>왜 Mode 1과 Mode 2의 오류 처리가 다른가요?</td><td>"Mode 1은 사용자의 재입력을 돕는 상호작용이고, Mode 2는 데이터셋 전체를 분석하는 배치 작업이므로 case별 실패를 기록하고 계속 진행합니다."</td></tr>
+                <tr><td>1D가 빠르면 알고리즘이 달라진 건가요?</td><td>"아닙니다. 둘 다 N² 위치를 방문합니다. 1D는 Python에서 행 리스트 참조나 메서드 호출 같은 반복당 비용을 줄일 수 있는 구현 최적화입니다."</td></tr>
+                <tr><td>I/O를 측정에서 뺀 이유는 무엇인가요?</td><td>"I/O가 측정 불가능해서가 아니라 공통 I/O가 MAC 구현 차이를 가리기 때문입니다. 순수 MAC과 전체 처리 시간은 별도 지표로 봅니다."</td></tr>
+                <tr><td>내적 점수가 높으면 항상 방향이 더 유사한가요?</td><td>"고정된 이진 필터에서는 겹침 점수로 해석할 수 있습니다. 일반 벡터의 방향 유사도라면 크기 영향을 제거한 코사인 유사도가 필요합니다."</td></tr>
+                <tr><td>NPU 유닛이 많으면 그 배수만큼 빨라지나요?</td><td>"아닙니다. 메모리 대역폭, 데이터 전송, 실행·동기화 비용, 배치 크기가 실제 속도 향상을 제한합니다."</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="callout callout-success">
+            <p><strong>마지막 점검:</strong> 발표 전에 Cross/X 3×3 예제를 손으로 계산해 <code>Cross=1.0, X=5.0</code>을 설명하고, <code>abs(diff) &lt; 1e-9</code>의 엄격한 경계를 말하고, <code>25×25 → 한 필터 625회 / 두 필터 1,250회</code>를 구분해 말할 수 있으면 핵심 질문에 대응할 수 있습니다.</p>
+        </div>
+   </section>
+
+    <!-- ============ 12 ============ -->
+    <section id="submission">
+        <h2>12. 제출·결과 리포트 완성 가이드</h2>
+        <p>프로그램이 실행되는 것과, 요구사항을 평가자가 확인할 수 있게 문서화하는 것은 별개의 일입니다. <code>README.md</code>에는 실행 방법뿐 아니라 실패 원인 분석과 <code>O(N²)</code> 근거를 포함한 결과 리포트가 필요합니다. 이 절은 콘솔 출력, 성능 표, README를 하나의 일관된 증거로 만드는 방법을 설명합니다.</p>
+
+        <div class="callout callout-info">
+            <p><strong>제출 관점의 핵심:</strong> "무엇을 구현했는가"만 쓰지 말고, <strong>어떤 입력으로 실행했고, 어떤 결과가 나왔으며, 실패가 왜 발생했거나 발생하지 않았는지</strong>를 점수·판정·복잡도 근거와 함께 남깁니다.</p>
+        </div>
+
+        <h3>12-1. README에 반드시 연결해야 할 7가지</h3>
+        <div class="table-wrap">
+        <table class="wide">
+            <thead><tr><th>섹션</th><th>반드시 보여 줄 내용</th><th>평가자가 확인하는 근거</th></tr></thead>
+            <tbody>
+                <tr><td>실행 방법</td><td>Python 버전, 실행 명령, 메뉴 1/2, <code>data.json</code> 위치</td><td>다른 사람이 같은 환경에서 프로그램을 시작할 수 있다.</td></tr>
+                <tr><td>구현 요약</td><td>2D Grid, 반복문 MAC, Cross/X 정규화, epsilon 정책</td><td>외부 벡터 라이브러리 없이 핵심 요구사항을 구현했다.</td></tr>
+                <tr><td>모드 1 증거</td><td>3×3 A/B 필터와 패턴, 점수, 평균 시간, A/B/판정 불가</td><td>사용자 입력 경로와 재입력 정책이 동작한다.</td></tr>
+                <tr><td>모드 2 증거</td><td>case별 Cross/X 점수, prediction, expected, PASS/FAIL, 실패 사유</td><td>키 해석·라벨 정규화·스키마 격리·집계가 동작한다.</td></tr>
+                <tr><td>결과 리포트</td><td>데이터/스키마, 수치 비교, 로직 문제를 분리한 실패 분석</td><td>FAIL을 단순 숫자가 아니라 진단 가능한 결과로 다룬다.</td></tr>
+                <tr><td>성능 분석</td><td>크기, 평균 ms, N², 반복 횟수, I/O 제외 범위, 환경</td><td>측정값과 <code>O(N²)</code> 설명의 범위가 명확하다.</td></tr>
+                <tr><td>재현성과 테스트</td><td>정상·동점·오류 재현 입력, 자동 테스트 명령</td><td>결과를 다시 확인할 방법이 있다.</td></tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h3>12-2. 결과 리포트는 실패 원인을 세 갈래로 나눈다</h3>
+        <p>같은 FAIL이라도 원인이 다르면 해결 방법도 다르다. README에는 결과 표 아래에서 반드시 어느 범주인지 구분한다.</p>
+        <div class="table-wrap">
+        <table class="wide">
+            <thead><tr><th>분류</th><th>대표 사례</th><th>MAC 실행 여부</th><th>보고서에 쓸 설명</th></tr></thead>
+            <tbody>
+                <tr><td>데이터·스키마 문제</td><td>잘못된 case 키, 누락 필터, 비정방 Grid, <code>SIZE_MISMATCH</code>, 알 수 없는 expected</td><td>검증 실패면 실행하지 않음</td><td>"입력이 계약을 만족하지 않아 해당 case만 FAIL로 격리했고, 이후 case는 계속 분석했습니다."</td></tr>
+                <tr><td>수치 비교 문제</td><td>두 점수 차이가 <code>EPSILON</code> 미만인 <code>UNDECIDED</code></td><td>실행함</td><td>"MAC 점수는 계산됐지만 부동소수점 오차 범위에서 단일 레이블을 신뢰성 있게 선택할 수 없어 FAIL 처리했습니다."</td></tr>
+                <tr><td>로직 문제</td><td>잘못된 필터 선택, MAC 누적 오류, 라벨 정규화 실패, 최고 점수 선택 오류</td><td>상황에 따라 다름</td><td>"정상 데이터인데 prediction과 expected가 달라진 이유를 함수 단위로 추적해 수정해야 하는 결함입니다."</td></tr>
+            </tbody>
+        </table>
+        </div>
+        <div class="callout callout-success">
+            <p><strong>FAIL이 0개일 때의 작성법:</strong> "모든 Grid가 크기·스키마 계약을 만족했고, 정규화된 expected와 MAC 판정이 일치했으며, 동점 사례는 epsilon 정책에 따라 일관되게 처리되어 0 FAIL이 되었습니다."처럼 통과의 근거도 적습니다.</p>
+        </div>
+
+        <h3>12-3. 성능 리포트 문장을 만드는 공식</h3>
+        <p>ms 값만 나열하면 시간복잡도 분석이 아니다. 측정 대상, 반복 횟수, 연산 횟수, 관측된 경향을 연결해 써야 한다.</p>
+        <div class="card">
+            <h4>그대로 바꿔 쓸 수 있는 보고서 템플릿</h4>
+            <pre><code>측정 환경: Python [버전], [운영체제], repeat=[횟수]
+측정 범위: 입력·출력·파일 읽기를 제외한 mac() 호출 구간
+결과: N=3, 5, 13, 25에서 평균 [ms]를 기록했다.
+
+필터 하나와 패턴 하나의 MAC은 모든 N×N 위치를 한 번씩
+방문하므로 연산 횟수는 N²이다.
+예를 들어 25×25에서는 625개 위치를 계산한다.
+Cross와 X 두 필터를 모두 채점하면 MAC 두 번이므로 2N²이다.
+
+작은 입력에서는 함수 호출과 타이머 같은 고정 비용 때문에
+시간 비율이 N² 비율과 정확히 같지 않을 수 있다.
+그러나 N이 커질수록 모든 위치를 방문하는 비용이 커지므로
+측정값은 N² 증가 경향으로 해석한다.</code></pre>
+        </div>
+        <p>1D 평탄화 비교는 위 기본 성능 표와 섞지 않는다. 동일 입력·동일 반복 횟수에서 2D와 1D를 따로 측정하고, "복잡도는 같고 반복당 접근 비용의 차이를 비교한 것"이라고 명시한다.</p>
+
+        <h3>12-4. 콘솔 로그·스크린샷·README를 같은 실행으로 맞춘다</h3>
+        <ol class="bullets">
+            <li>먼저 현재 <code>data.json</code>으로 모드 2를 한 번 실행하고, case별 결과와 전체 Total/PASS/FAIL을 기록한다.</li>
+            <li>같은 실행 조건의 성능 표에서 반복 횟수, 평균 ms, N² 열을 기록한다.</li>
+            <li>README의 결과 표와 실패 원인 분석을 이 결과에 맞춰 갱신한다. 이전 실행의 시간과 새 실행의 case 수를 섞지 않는다.</li>
+            <li>스크린샷을 제공한다면 실제로 존재하는 파일만 링크하고, 화면의 시간·점수·집계가 README의 같은 실행 로그와 맞는지 확인한다.</li>
+            <li>입력 데이터나 구현을 수정했다면 결과 표, 요약 수, 실패 목록, 성능 설명을 함께 다시 갱신한다.</li>
+        </ol>
+        <p>스크린샷은 요구사항의 필수 산출물은 아니지만, 제공할 경우에는 실행 증거여야 한다. 존재하지 않는 이미지 경로나 예시 시간을 실제 결과처럼 링크하면 문서 신뢰도가 떨어진다.</p>
+
+        <h3>12-5. 제출 직전 1분 점검표</h3>
+        <div class="card">
+            <p>[ ] <code>main.py</code>는 Python 3.8 이상에서 외부 라이브러리 없이 실행된다.</p>
+            <p>[ ] 모드 1은 3×3 A/B/패턴을 받고, 잘못된 행 수·열 수·숫자 입력을 안내 후 재입력받는다.</p>
+            <p>[ ] 모드 2는 <code>size_5</code>, <code>size_13</code>, <code>size_25</code> 필터와 <code>size_N_idx</code> 패턴을 검증한다.</p>
+            <p>[ ] 모든 출력과 expected 비교는 정규화된 Cross/X 라벨을 사용한다.</p>
+            <p>[ ] 동점은 <code>abs(diff) &lt; 1e-9</code>일 때만 <code>UNDECIDED</code>이고, 정확히 epsilon인 경계는 동점이 아니다.</p>
+            <p>[ ] 각 JSON case는 PASS 또는 FAIL 하나로 집계되고, 실패해도 다음 case를 계속 처리한다.</p>
+            <p>[ ] 성능 표에는 3×3, 5×5, 13×13, 25×25의 평균 ms와 N²가 있고, 최소 10회 반복 조건을 적었다.</p>
+            <p>[ ] README에는 실패 원인 분석과 O(N²) 분석이 10줄 이상 있으며, 현재 실행 결과와 일치한다.</p>
+            <p>[ ] 자동 테스트 또는 수동 재현으로 정상·동점·입력 오류·크기 불일치를 확인했다.</p>
+        </div>
+
+        <h3>12-6. 최종 발표 마무리 문장</h3>
+        <div class="callout callout-success">
+            <p>"이 과제에서는 MAC 계산 자체뿐 아니라, 계산 전에 데이터 계약을 검증하고, 부동소수점 오차를 epsilon으로 정책화하고, 실패를 case 단위로 기록했습니다. 성능은 순수 MAC 구간을 반복 측정해 N² 연산량과 연결했고, README에는 결과·실패 원인·재현 방법을 남겨 구현을 다시 검증할 수 있게 했습니다."</p>
+        </div>
     </section>
 
-    <footer>
+   <footer>
         Mini NPU 시뮬레이터 학습 교안 · 근거: <code>main.py</code>, <code>README.md</code>, <code>docs/reference.md</code>, <code>docs/TODO.md</code>, <code>tests/test_main.py</code> ·
         외부 스크립트 없이 순수 HTML/CSS/JS로 동작하며 <code>file://</code>로 바로 열 수 있습니다(웹폰트만 네트워크 사용, 오프라인에서는 시스템 폰트로 대체).
     </footer>
