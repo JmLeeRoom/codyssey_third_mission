@@ -428,7 +428,8 @@ footer code { font-size: 0.95em; }
         <li><a href="#flat">8. ⚡ 1차원 평탄화 최적화</a></li>
         <li><a href="#verify">9. 자동 검증 &amp; 함정 점검표</a></li>
        <li><a href="#quiz">10. 🧩 실전 학습 퀴즈</a></li>
-       <li><a href="#oral-master">11. 🎤 발표·질문 대응</a></li>
+        <li><a href="#oral-master">11. 🎤 발표·질문 대응</a></li>
+        <li><a href="#large-scale-answer">&nbsp;&nbsp;└ 1000×1000 4단 암기 답변</a></li>
         <li><a href="#submission">12. 📝 제출·리포트 점검</a></li>
    </ul>
 </aside>
@@ -1314,6 +1315,47 @@ elapsed_per_call = (perf_counter() - started) / repeats</code></pre>
 
         <div class="callout callout-info">
             <p><strong>측정 기록을 읽는 법:</strong> 3×3에서 13×13으로 가면 원소 수는 약 18.8배, 25×25로 가면 약 69.4배다. 어제 기록한 실행 시간 비율은 특정 구현·환경에서의 관측값으로 표기하고, "N² 경향을 보인다"까지만 일반화한다. 절대 ms 값과 개선 배수는 Python 버전, CPU, 반복 수, 실행 환경에 따라 달라진다.</p>
+        </div>
+
+        <h3 id="large-scale-answer">11-8a. 1000×1000 심층 답변 — 외우기 쉬운 4단 구조</h3>
+        <div class="callout callout-success">
+            <p><strong>암기 순서:</strong> <code>시간 문제 → 메모리 문제 → 시간 최적화 → 메모리 최적화</code>. 질문을 받으면 이 네 단어만 떠올린 뒤, 각 카드의 “요약 → 이유 → 키워드” 순서로 말합니다.</p>
+        </div>
+
+        <div class="card">
+            <h4>1. 시간 문제</h4>
+            <p><strong>핵심 요약 1줄:</strong> 1000×1000 MAC은 필터 하나당 100만 번, Cross와 X 두 필터 비교는 최소 200만 번을 반복하므로 순수 Python 루프가 느려진다.</p>
+            <p><strong>상세 원리/이유:</strong> 모든 위치를 확인하므로 시간복잡도는 <code>O(N²)</code>이다. CPython의 <code>for</code>문은 곱셈만 하는 것이 아니라 매 반복마다 바이트코드를 해석하고, 동적 타입을 확인하며, PyObject 참조와 인덱스를 처리한다. 그래서 전용 NPU의 하드웨어 MAC보다 반복 한 번의 비용이 크다.</p>
+            <p><strong>암기 키워드:</strong> <code>N²</code> · <code>1,000,000</code> · <code>2,000,000</code> · <code>CPython for문</code> · <code>바이트코드</code> · <code>동적 타입</code></p>
+        </div>
+
+        <div class="card">
+            <h4>2. 메모리 문제</h4>
+            <p><strong>핵심 요약 1줄:</strong> 2차원 <code>list of lists</code>는 데이터와 참조가 나뉘어 있어 RAM 부족 자체보다 캐시 미스와 포인터 체이싱이 먼저 성능을 떨어뜨릴 수 있다.</p>
+            <p><strong>상세 원리/이유:</strong> 2D 리스트는 행 리스트를 가리키고, 각 행은 다시 원소 객체를 가리키는 포인터 배열 구조다. CPU가 다음 값을 읽을 때 행 참조와 원소 참조를 따라가야 하므로 데이터가 연속적이지 않을 수 있다. 100만 원소는 L1/L2 캐시를 훨씬 넘기 때문에 CPU가 가까운 캐시에 데이터를 준비하지 못하면 메모리 지연이 커진다. 일반 64비트 CPython에서 별도 생성된 float 100만 개 Grid는 참조를 포함해 수십 MB 수준이지만, 이는 곧바로 OOM이라는 뜻은 아니다.</p>
+            <p><strong>암기 키워드:</strong> <code>list of lists</code> · <code>포인터 배열</code> · <code>Cache Miss</code> · <code>Pointer Chasing</code> · <code>Spatial Locality</code></p>
+        </div>
+
+        <div class="card">
+            <h4>3. 시간 최적화</h4>
+            <p><strong>핵심 요약 1줄:</strong> 미션 범위에서는 0이 많은 Cross/X 필터에 희소 구조를 적용해 0과의 무의미한 곱셈을 건너뛴다.</p>
+            <p><strong>상세 원리/이유:</strong> 1000×1000 Cross 또는 X 필터의 1은 <code>2N−1 = 1,999</code>개다. 고정 필터의 non-zero 인덱스를 한 번 만들어 재사용하면, 필터 두 개 비교에서 약 <code>3,998</code>개 위치만 순회하면 된다. 다만 매번 인덱스를 새로 만들면 준비 과정이 O(N²)이므로 고정·재사용되는 희소 필터일 때 효과적이다. 현 미션 밖의 확장안은 NumPy SIMD와 <code>multiprocessing</code>이다. 순수 Python CPU 작업에 <code>threading</code>을 쓰면 GIL 때문에 한 번에 하나의 스레드만 바이트코드를 실행하므로 보통 빨라지지 않는다.</p>
+            <p><strong>암기 키워드:</strong> <code>Sparse</code> · <code>Non-zero index</code> · <code>0 곱셈 생략</code> · <code>GIL</code> · <code>multiprocessing</code></p>
+        </div>
+
+        <div class="card">
+            <h4>4. 메모리 최적화</h4>
+            <p><strong>핵심 요약 1줄:</strong> 미션 범위에서는 2D Grid를 1D로 평탄화해 순차 접근을 늘리고, 다음 단계에서 <code>array</code>·<code>bytearray</code>로 연속 C 버퍼를 사용한다.</p>
+            <p><strong>상세 원리/이유:</strong> <code>grid[r][c]</code> 대신 <code>flat[i]</code>를 쓰면 행 리스트를 다시 찾는 단계가 줄고, 하나의 참조 배열을 순차 접근하므로 공간 지역성에 유리하다. 단, 방문 위치 수는 같으므로 O(N²)가 O(N)으로 바뀌지는 않는다. Python 1D 리스트도 각 float 객체까지 모두 붙는 것은 아니므로, 객체·포인터 오버헤드까지 줄이려면 실수에는 <code>array('d')</code>, 0/1 값에는 <code>bytearray</code>를 사용한다. 100만 원소의 저장 공간은 각각 약 8MB와 약 1MB다.</p>
+            <p><strong>암기 키워드:</strong> <code>Flattening</code> · <code>1D list</code> · <code>순차 접근</code> · <code>Spatial Locality</code> · <code>array</code> · <code>bytearray</code></p>
+        </div>
+
+        <div class="card">
+            <h4>보너스. 1분 완벽 암기 치트키 — 딱 4문장</h4>
+            <p><strong>① 시간 문제:</strong> "1000×1000은 필터 하나당 100만 번, 두 필터면 200만 번을 계산하는 O(N²) 문제이고, CPython for문 오버헤드가 누적됩니다."</p>
+            <p><strong>② 메모리 문제:</strong> "2차원 리스트는 참조가 여러 단계로 나뉘어 있어 단순 RAM 부족보다 캐시 미스와 포인터 체이싱으로 느려질 수 있습니다."</p>
+            <p><strong>③ 시간 최적화:</strong> "Cross와 X처럼 0이 많은 필터는 non-zero 인덱스만 순회하는 희소 구조로 0 곱셈을 건너뛰고, threading은 GIL 때문에 쓰지 않으며 필요하면 multiprocessing을 검토합니다."</p>
+            <p><strong>④ 메모리 최적화:</strong> "먼저 2D를 1D로 평탄화해 순차 접근과 캐시 지역성을 높이고, 다음으로 array나 bytearray로 Python 객체 포인터 오버헤드를 줄이겠습니다."</p>
         </div>
 
         <h3>11-9. CPU와 NPU 병렬 처리의 차이</h3>
